@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1f6f5c">
+<meta name="description" content="Registro spese personale: i dati restano sul tuo dispositivo.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Spese</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="app">
+  <header id="topbar">
+    <button class="icon-btn" id="prev" type="button" aria-label="Mese precedente">‹</button>
+    <h1 id="monthLabel">Spese</h1>
+    <button class="icon-btn" id="next" type="button" aria-label="Mese successivo">›</button>
+  </header>
+
+  <div id="banner" role="status" hidden></div>
+
+  <main>
+    <section id="tab-spese" class="tab"></section>
+    <section id="tab-riepilogo" class="tab" hidden></section>
+    <section id="tab-dati" class="tab" hidden></section>
+  </main>
+
+  <button id="fab" type="button" aria-label="Aggiungi spesa">+</button>
+
+  <nav id="tabbar" aria-label="Sezioni">
+    <button type="button" data-tab="spese" class="active">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+      <span>Spese</span>
+    </button>
+    <button type="button" data-tab="riepilogo">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/></svg>
+      <span>Riepilogo</span>
+    </button>
+    <button type="button" data-tab="dati">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>
+      <span>Categorie e dati</span>
+    </button>
+  </nav>
+</div>
+
+<dialog id="expDialog" aria-labelledby="expTitle">
+  <form id="expForm" autocomplete="off">
+    <h2 id="expTitle">Nuova spesa</h2>
+
+    <label class="field">Nome spesa
+      <input name="expname" type="text" maxlength="80" required placeholder="Es. Spesa al supermercato">
+    </label>
+
+    <div class="field" role="radiogroup" aria-label="Tipo di spesa">
+      <span>Tipo</span>
+      <div class="row">
+        <label class="opt essential"><input type="radio" name="type" value="essential" checked><span>Essenziale</span></label>
+        <label class="opt extra"><input type="radio" name="type" value="extra"><span>Extra</span></label>
+      </div>
+    </div>
+
+    <label class="field">Categoria
+      <select name="category" required></select>
+    </label>
+
+    <label class="field amount">Importo (€)
+      <input name="amount" type="text" inputmode="decimal" placeholder="0,00" required>
+    </label>
+
+    <label class="field">Commento (facoltativo)
+      <textarea name="comment" rows="3" maxlength="500" placeholder="Informazioni aggiuntive"></textarea>
+    </label>
+
+    <label class="field">Data
+      <input name="date" type="date" required>
+    </label>
+
+    <div class="field">
+      <span>Allegati (facoltativi)</span>
+      <ul id="attList" class="attlist"></ul>
+      <div class="row">
+        <button type="button" class="btn" id="attPhotoBtn">Foto</button>
+        <button type="button" class="btn" id="attFileBtn">File</button>
+      </div>
+      <input type="file" id="attPhoto" accept="image/*" multiple hidden>
+      <input type="file" id="attFile" multiple hidden>
+    </div>
+
+    <div class="actions">
+      <button type="button" class="btn" id="expCancel">Annulla</button>
+      <button type="submit" class="btn primary">Salva</button>
+    </div>
+    <button type="button" class="btn danger" id="expDelete" hidden>Elimina spesa</button>
+  </form>
+</dialog>
+
+<dialog id="catDialog" aria-labelledby="catTitle">
+  <form id="catForm" autocomplete="off">
+    <h2 id="catTitle">Nuova categoria</h2>
+
+    <label class="field">Nome
+      <input name="catname" type="text" maxlength="40" required>
+    </label>
+
+    <div class="field" role="radiogroup" aria-label="Tipo predefinito">
+      <span>Tipo predefinito</span>
+      <div class="row">
+        <label class="opt essential"><input type="radio" name="type" value="essential" checked><span>Essenziale</span></label>
+        <label class="opt extra"><input type="radio" name="type" value="extra"><span>Extra</span></label>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button type="button" class="btn" id="catCancel">Annulla</button>
+      <button type="submit" class="btn primary">Salva</button>
+    </div>
+    <button type="button" class="btn danger" id="catDelete" hidden>Elimina categoria</button>
+  </form>
+</dialog>
+
+<dialog id="viewDialog" aria-label="Anteprima allegato">
+  <div class="viewer">
+    <img id="viewImg" alt="">
+    <button type="button" class="btn" id="viewClose">Chiudi</button>
+  </div>
+</dialog>
+
+<div id="toast" role="status" aria-live="polite"></div>
+<input type="file" id="fileJson" accept="application/json,.json" hidden>
+<input type="file" id="fileCsv" accept=".csv,text/csv" hidden>
+
+<script src="app.js"></script>
+</body>
+</html>
