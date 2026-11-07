@@ -121,6 +121,20 @@
   </form>
 </dialog>
 
+<dialog id="backupDialog" aria-labelledby="backupTitle">
+  <div class="sheet">
+    <h2 id="backupTitle">Backup</h2>
+    <p id="backupInfo" class="muted" aria-live="polite">Preparazione in corso…</p>
+    <label class="check"><input type="checkbox" id="backupAtt" checked> Includi gli allegati</label>
+    <button type="button" class="btn primary" id="backupShare">Invia a Google Drive</button>
+    <p id="backupNoShare" class="muted small" hidden>La condivisione diretta non è disponibile su questo dispositivo: scarica il file e caricalo su Drive dall'app Drive.</p>
+    <button type="button" class="btn" id="backupDownload">Scarica nel telefono</button>
+    <p id="backupMsg" class="small msg" role="status"></p>
+    <p class="muted small">Con «Invia a Google Drive» si apre il menu di condivisione del telefono: scegli <strong>Drive</strong>. Su Drive il file avrà estensione .txt, è normale. Contiene tutte le spese e non è cifrato. Per ripristinarlo usa «Ripristina da backup» e scegli quel file.</p>
+    <button type="button" class="btn" id="backupClose">Chiudi</button>
+  </div>
+</dialog>
+
 <dialog id="viewDialog" aria-label="Anteprima allegato">
   <div class="viewer">
     <img id="viewImg" alt="">
@@ -129,7 +143,7 @@
 </dialog>
 
 <div id="toast" role="status" aria-live="polite"></div>
-<input type="file" id="fileJson" accept="application/json,.json" hidden>
+<input type="file" id="fileJson" accept="application/json,.json,text/plain,.txt" hidden>
 <input type="file" id="fileCsv" accept=".csv,text/csv" hidden>
 
 <script src="app.js"></script>

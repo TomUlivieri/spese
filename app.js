@@ -189,7 +189,11 @@ const getAll = () => rq(st('expenses').getAll());
 const getRange = (a, b) => rq(st('expenses').index('date').getAll(IDBKeyRange.bound(a, b)));
 
 /* ---------- Stato ---------- */
-const S = { month: monthOf(new Date()), tab: 'spese', cats: [], exp: [], prevTotal: 0, prevCount: 0, count: 0 };
+const S = {
+  month: monthOf(new Date()), tab: 'spese', view: 'mese', year: new Date().getFullYear(),
+  cats: [], exp: [], yexp: [], yprev: [], prevTotal: 0, prevCount: 0, count: 0
+};
+const yearMode = () => S.tab === 'riepilogo' && S.view === 'anno';
 let editingId = null;
 let editingCatId = null;
 let installEvt = null;
@@ -208,12 +212,16 @@ async function refresh() {
   S.prevTotal = sum(prev);
   S.prevCount = prev.length;
   S.count = await rq(st('expenses').count());
+  if (yearMode()) {
+    S.yexp = await getRange(`${S.year}-01-01`, `${S.year}-12-31`);
+    S.yprev = await getRange(`${S.year - 1}-01-01`, `${S.year - 1}-12-31`);
+  }
   render();
 }
 
 /* ---------- Rendering ---------- */
 function render() {
-  $('#monthLabel').textContent = monthLabel(S.month);
+  $('#monthLabel').textContent = yearMode() ? String(S.year) : monthLabel(S.month);
   document.querySelectorAll('.tab').forEach(t => { t.hidden = t.id !== 'tab-' + S.tab; });
   document.querySelectorAll('#tabbar button').forEach(b => b.classList.toggle('active', b.dataset.tab === S.tab));
   $('#topbar').hidden = S.tab === 'dati';
@@ -294,46 +302,65 @@ function legendRow(type, label, amount, pct) {
     el('span', { class: 'muted', text: pct + '%' }));
 }
 
-function renderSummary() {
-  const root = $('#tab-riepilogo');
-  root.replaceChildren();
-  if (!S.exp.length) { root.append(emptyState()); return; }
+const monthName = (i, style = 'long') => cap(new Date(2000, i, 1).toLocaleDateString('it-IT', { month: style }));
+const signed = d => (d >= 0 ? '+' : '−') + fmt(Math.abs(d));
 
-  const total = sum(S.exp);
-  const ess = sum(S.exp.filter(e => e.type === 'essential'));
-  const ext = total - ess;
-  const pEss = Math.round(ess / total * 100);
+// Variazione percentuale arrotondata ("+12%", "−6%", "0%"); null se manca un termine di confronto.
+function pctStr(cur, prev) {
+  if (!(prev > 0)) return null;
+  const p = Math.round((cur - prev) / prev * 100);
+  return (p > 0 ? '+' : p < 0 ? '−' : '') + Math.abs(p) + '%';
+}
 
-  let delta = null;
-  if (S.prevCount > 0) {
-    const d = total - S.prevTotal;
-    delta = el('span', { class: 'muted small', text: `${d >= 0 ? '+' : '−'}${fmt(Math.abs(d))} rispetto al mese precedente` });
-  }
-  root.append(el('div', { class: 'card hero' },
-    el('span', { class: 'muted', text: 'Totale speso' }),
-    el('strong', { class: 'big', text: fmt(total) }),
-    delta));
+function periodToggle() {
+  const mk = (view, label) => el('button', {
+    type: 'button', 'aria-pressed': String(S.view === view), text: label,
+    onclick: async () => {
+      if (S.view === view) return;
+      S.view = view;
+      if (view === 'anno') S.year = Number(S.month.slice(0, 4));
+      await refresh();
+    }
+  });
+  return el('div', { class: 'segtoggle', role: 'group', 'aria-label': 'Periodo' }, mk('mese', 'Mese'), mk('anno', 'Anno'));
+}
 
-  root.append(el('div', { class: 'card' },
+function splitCard(ess, ext) {
+  const pEss = Math.round(ess / (ess + ext) * 100);
+  return el('div', { class: 'card' },
     el('h2', { text: 'Essenziali e extra' }),
     el('div', { class: 'split', role: 'img', 'aria-label': `Essenziali ${pEss}%, extra ${100 - pEss}%` },
       el('span', { class: 'seg essential', style: `flex:${ess}` }),
       el('span', { class: 'seg extra', style: `flex:${ext}` })),
     el('div', { class: 'legend' },
       legendRow('essential', 'Essenziali', ess, pEss),
-      legendRow('extra', 'Extra', ext, 100 - pEss))));
+      legendRow('extra', 'Extra', ext, 100 - pEss)));
+}
 
+// cmp (facoltativo): { label, exps } = spese del periodo di confronto, mostrate sotto ogni categoria.
+function categoryCard(exps, total, cmp) {
   const by = new Map();
-  for (const e of S.exp) {
+  for (const e of exps) {
     const r = by.get(e.categoryId) || { ess: 0, ext: 0 };
     if (e.type === 'essential') r.ess += e.amount; else r.ext += e.amount;
     by.set(e.categoryId, r);
   }
   const rows = [...by].map(([id, r]) => ({ id, ess: r.ess, ext: r.ext, tot: r.ess + r.ext })).sort((a, b) => b.tot - a.tot);
   const max = rows[0].tot;
+  const prevBy = new Map();
+  if (cmp) for (const e of cmp.exps) prevBy.set(e.categoryId, (prevBy.get(e.categoryId) || 0) + e.amount);
 
   const card = el('div', { class: 'card' }, el('h2', { text: 'Per categoria' }));
   for (const r of rows) {
+    let cmpLine = null;
+    if (cmp && cmp.exps.length) {
+      const pv = prevBy.get(r.id) || 0;
+      const pc = pctStr(r.tot, pv);
+      cmpLine = el('span', {
+        class: 'muted small',
+        text: pv > 0 ? `${cmp.label}: ${fmt(pv)}${pc ? ' (' + pc + ')' : ''}` : `${cmp.label}: nessuna spesa`
+      });
+    }
     card.append(el('div', { class: 'catrow' },
       el('div', { class: 'cathead' },
         el('span', { text: catName(r.id) }),
@@ -341,9 +368,114 @@ function renderSummary() {
       el('div', { class: 'track' },
         el('div', { class: 'bar', style: `width:${(r.tot / max * 100).toFixed(1)}%` },
           el('span', { class: 'seg essential', style: `flex:${r.ess}` }),
-          el('span', { class: 'seg extra', style: `flex:${r.ext}` })))));
+          el('span', { class: 'seg extra', style: `flex:${r.ext}` }))),
+      cmpLine));
   }
-  root.append(card);
+  return card;
+}
+
+function renderSummary() {
+  const root = $('#tab-riepilogo');
+  root.replaceChildren(periodToggle());
+  if (S.view === 'anno') renderYear(root); else renderMonthSummary(root);
+}
+
+function renderMonthSummary(root) {
+  if (!S.exp.length) { root.append(emptyState()); return; }
+  const total = sum(S.exp);
+  const ess = sum(S.exp.filter(e => e.type === 'essential'));
+
+  let delta = null;
+  if (S.prevCount > 0) {
+    delta = el('span', { class: 'muted small', text: `${signed(total - S.prevTotal)} rispetto al mese precedente` });
+  }
+  root.append(
+    el('div', { class: 'card hero' },
+      el('span', { class: 'muted', text: 'Totale speso' }),
+      el('strong', { class: 'big', text: fmt(total) }),
+      delta),
+    splitCard(ess, total - ess),
+    categoryCard(S.exp, total, null));
+}
+
+function yearChart(cur, prev, y) {
+  const max = Math.max(1, ...cur, ...prev);
+  const h = v => (v > 0 ? `height:${Math.max(2, v / max * 100).toFixed(1)}%` : 'height:0');
+  return el('div', { class: 'ychart', role: 'img', 'aria-label': `Spese mese per mese: ${y} a confronto con ${y - 1}` },
+    cur.map((c, i) => el('div', { class: 'ycol' },
+      el('div', { class: 'ybars' },
+        el('span', { class: 'ybar prev' + (prev[i] > 0 ? '' : ' zero'), style: h(prev[i]) }),
+        el('span', { class: 'ybar cur' + (c > 0 ? '' : ' zero'), style: h(c) })),
+      el('span', { class: 'ylab', text: monthName(i, 'short') }))));
+}
+
+function renderYear(root) {
+  const y = S.year;
+  const now = new Date();
+  const partial = y === now.getFullYear();
+  if (!S.yexp.length) {
+    root.append(el('div', { class: 'empty' }, el('p', { text: `Nessuna spesa nel ${y}.` })));
+    return;
+  }
+
+  const total = sum(S.yexp);
+  const ess = sum(S.yexp.filter(e => e.type === 'essential'));
+  // Anno in corso: si confronta con lo stesso periodo dell'anno prima, non con l'anno intero.
+  const cutoff = `${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  const prevCmp = partial ? S.yprev.filter(e => e.date.slice(5) <= cutoff) : S.yprev;
+  const prevTotal = sum(prevCmp);
+  const monthsN = partial ? now.getMonth() + 1 : 12;
+
+  let delta;
+  if (prevTotal > 0) {
+    delta = el('span', {
+      class: 'muted small',
+      text: `${signed(total - prevTotal)} (${pctStr(total, prevTotal)}) ${partial ? 'rispetto allo stesso periodo del' : 'rispetto al'} ${y - 1}`
+    });
+  } else {
+    delta = el('span', { class: 'muted small', text: `Nessuna spesa nel ${y - 1} da confrontare` });
+  }
+  root.append(el('div', { class: 'card hero' },
+    el('span', { class: 'muted', text: `Totale ${y}` }),
+    el('strong', { class: 'big', text: fmt(total) }),
+    el('span', { class: 'muted small', text: `Media mensile: ${fmt(Math.round(total / monthsN))}` }),
+    delta));
+
+  const cur = Array(12).fill(0);
+  const prev = Array(12).fill(0);
+  for (const e of S.yexp) cur[Number(e.date.slice(5, 7)) - 1] += e.amount;
+  for (const e of S.yprev) prev[Number(e.date.slice(5, 7)) - 1] += e.amount;
+
+  const key = (kind, label) => el('span', { class: 'key' }, el('span', { class: 'swatch ' + kind }), label);
+  root.append(el('div', { class: 'card' },
+    el('h2', { text: `Mese per mese: ${y} e ${y - 1}` }),
+    yearChart(cur, prev, y),
+    el('div', { class: 'keys' }, key('cur', String(y)), key('prev', String(y - 1)))));
+
+  const body = [];
+  for (let i = 0; i < 12; i++) {
+    const c = cur[i], p = prev[i];
+    const both = c > 0 && p > 0;
+    body.push(el('tr', {},
+      el('th', { scope: 'row', text: monthName(i) + (partial && i === now.getMonth() ? ' *' : '') }),
+      el('td', { text: c ? fmt(c) : '—' }),
+      el('td', { text: p ? fmt(p) : '—' }),
+      el('td', { class: 'dcell' }, both
+        ? [el('span', { class: 'dpct', text: pctStr(c, p) }), el('span', { class: 'muted small', text: signed(c - p) })]
+        : '—')));
+  }
+  root.append(el('div', { class: 'card' },
+    el('h2', { text: 'Confronto con l\'anno precedente' }),
+    el('table', { class: 'ytable' },
+      el('thead', {}, el('tr', {},
+        el('th', { scope: 'col', text: 'Mese' }),
+        el('th', { scope: 'col', text: String(y) }),
+        el('th', { scope: 'col', text: String(y - 1) }),
+        el('th', { scope: 'col', text: 'Variazione' }))),
+      el('tbody', {}, body)),
+    partial ? el('p', { class: 'muted small', text: '* Mese in corso: il confronto è parziale.' }) : null));
+
+  root.append(splitCard(ess, total - ess), categoryCard(S.yexp, total, { label: String(y - 1), exps: prevCmp }));
 }
 
 function renderData() {
@@ -374,10 +506,10 @@ function renderData() {
   const lastBackup = Number(ls('lastBackup')) || 0;
   root.append(el('div', { class: 'card' },
     el('h2', { text: 'Dati' }),
-    el('p', { class: 'muted small', text: `${S.count} spese salvate. Ultimo backup: ${lastBackup ? new Date(lastBackup).toLocaleDateString('it-IT') : 'mai'}.` }),
-    el('p', { class: 'muted small', text: 'Il backup (JSON) include anche gli allegati e può diventare pesante se ne hai molti. Il CSV contiene solo i nomi dei file allegati.' }),
-    el('button', { class: 'btn block', type: 'button', text: 'Crea backup completo (JSON)', onclick: backupJSON }),
-    el('button', { class: 'btn block', type: 'button', text: 'Ripristina da backup (JSON)', onclick: () => $('#fileJson').click() }),
+    el('p', { class: 'muted small', text: `${S.count} ${S.count === 1 ? 'spesa salvata' : 'spese salvate'}. Ultimo backup: ${lastBackup ? new Date(lastBackup).toLocaleDateString('it-IT') : 'mai'}.` }),
+    el('p', { class: 'muted small', text: 'Il backup contiene tutte le spese e, a scelta, gli allegati: puoi inviarlo a Google Drive o scaricarlo. Il CSV contiene solo i nomi dei file allegati.' }),
+    el('button', { class: 'btn primary block', type: 'button', text: 'Crea backup e invia a Google Drive', onclick: backupJSON }),
+    el('button', { class: 'btn block', type: 'button', text: 'Ripristina da backup', onclick: () => $('#fileJson').click() }),
     el('button', { class: 'btn block', type: 'button', text: 'Esporta tutte le spese (CSV)', onclick: async () => exportCSV(await getAll(), 'spese-tutte.csv') }),
     el('button', { class: 'btn block', type: 'button', text: 'Esporta il mese visualizzato (CSV)', onclick: () => exportCSV(S.exp, `spese-${S.month}.csv`) }),
     el('button', { class: 'btn block', type: 'button', text: 'Importa spese da CSV', onclick: () => $('#fileCsv').click() }),
@@ -388,6 +520,7 @@ function renderData() {
   root.append(el('div', { class: 'card' },
     el('h2', { text: 'Privacy' }),
     el('p', { text: "I dati e gli allegati sono salvati solo su questo dispositivo, nell'archivio del browser. L'app non invia nulla in rete e non usa servizi o risorse esterne." }),
+    el('p', { class: 'muted small', text: 'Se invii un backup a Google Drive lo fai tu, dal menu di condivisione del telefono: il file contiene tutte le spese e non è cifrato.' }),
     el('p', { class: 'muted small', text: 'Se cancelli i dati del sito o disinstalli il browser, le spese vanno perse: fai un backup ogni tanto.' }),
     persist, usage));
   if (navigator.storage && navigator.storage.persisted) {
@@ -500,6 +633,7 @@ expForm.addEventListener('submit', async ev => {
   ls('lastCat', String(rec.categoryId));
   expDlg.close();
   S.month = rec.date.slice(0, 7);
+  if (yearMode()) S.year = Number(rec.date.slice(0, 4));
   await refresh();
   toast('Spesa salvata');
 });
@@ -625,29 +759,96 @@ function parseCSV(text) {
   return rows.filter(r => r.some(x => x.trim() !== ''));
 }
 
+/* ---------- Backup (scarico o invio a Google Drive) ---------- */
+const backupDlg = $('#backupDialog');
+let backup = null; // { blob, count, files, withAtt }
+
 // Il backup è un JSON costruito a pezzi (Blob concatenati) così gli allegati non gonfiano la memoria.
-async function backupJSON() {
-  toast('Preparo il backup…');
+async function buildBackup(withAtt) {
   const cats = await getCats();
   const exps = await getAll();
+  let files = 0;
   let out = new Blob([
-    `{"app":"spese","version":2,"exportedAt":${JSON.stringify(new Date().toISOString())},` +
+    `{"app":"spese","version":2,"attachmentsIncluded":${withAtt},"exportedAt":${JSON.stringify(new Date().toISOString())},` +
     `"categories":${JSON.stringify(cats)},"expenses":[`
   ]);
   for (let i = 0; i < exps.length; i++) {
     const e = exps[i];
     const atts = [];
-    for (const a of e.attachments || []) {
-      atts.push({ name: a.name, type: a.type, size: a.size, data: await blobToB64(a.blob) });
+    if (withAtt) {
+      for (const a of e.attachments || []) {
+        atts.push({ name: a.name, type: a.type, size: a.size, data: await blobToB64(a.blob) });
+        files++;
+      }
     }
     out = new Blob([out, (i ? ',' : '') + JSON.stringify({ ...e, attachments: atts })]);
   }
   out = new Blob([out, ']}']);
-  download(`spese-backup-${dateStr(new Date())}.json`, out, 'application/json');
-  ls('lastBackup', String(Date.now()));
-  render();
-  toast('Backup creato');
+  return { blob: out, count: exps.length, files, withAtt };
 }
+
+const backupName = () => `spese-backup-${dateStr(new Date())}`;
+function markBackup() { ls('lastBackup', String(Date.now())); render(); }
+function setBackupBusy(b) { ['#backupShare', '#backupDownload', '#backupAtt'].forEach(s => { $(s).disabled = b; }); }
+function backupInfo() {
+  $('#backupInfo').textContent = backup
+    ? `${backup.count} ${backup.count === 1 ? 'spesa' : 'spese'}, ${backup.files} ${backup.files === 1 ? 'allegato' : 'allegati'}, ${fmtSize(backup.blob.size)}`
+    : 'Preparazione in corso…';
+}
+
+async function prepareBackup() {
+  backup = null;
+  $('#backupMsg').textContent = '';
+  setBackupBusy(true);
+  backupInfo();
+  try {
+    backup = await buildBackup($('#backupAtt').checked);
+  } catch (_) {
+    $('#backupMsg').textContent = 'Impossibile preparare il backup.';
+  }
+  setBackupBusy(false);
+  backupInfo();
+}
+
+// Punto di ingresso unico (pulsante in "Categorie e dati" e avviso dei 30 giorni).
+async function backupJSON() {
+  $('#backupAtt').checked = true;
+  const canShare = !!(navigator.share && navigator.canShare);
+  $('#backupShare').hidden = !canShare;
+  $('#backupNoShare').hidden = canShare;
+  backupDlg.showModal();
+  await prepareBackup();
+}
+
+// Il browser Android non condivide file .json: per Drive il backup viaggia come .txt (stesso contenuto).
+$('#backupShare').onclick = async () => {
+  if (!backup) return;
+  const file = new File([backup.blob], backupName() + '.txt', { type: 'text/plain' });
+  if (!navigator.canShare({ files: [file] })) {
+    $('#backupMsg').textContent = 'Il telefono non consente di condividere questo file. Usa «Scarica nel telefono» e caricalo su Drive.';
+    return;
+  }
+  try {
+    await navigator.share({ files: [file], title: 'Backup spese' });
+    markBackup();
+    backupDlg.close();
+    toast('Backup inviato: controlla che sia comparso su Drive');
+  } catch (err) {
+    if (err && err.name === 'AbortError') return; // annullato dall'utente
+    $('#backupMsg').textContent = 'Condivisione non riuscita (il file potrebbe essere troppo grande). Usa «Scarica nel telefono» e caricalo su Drive.';
+  }
+};
+$('#backupDownload').onclick = () => {
+  if (!backup) return;
+  download(backupName() + '.json', backup.blob, 'application/json');
+  markBackup();
+  backupDlg.close();
+  toast('Backup scaricato: lo trovi nella cartella Download');
+};
+$('#backupAtt').addEventListener('change', prepareBackup);
+$('#backupClose').onclick = () => backupDlg.close();
+backupDlg.addEventListener('close', () => { backup = null; });
+backupDlg.addEventListener('click', e => { if (e.target === backupDlg) backupDlg.close(); });
 
 function cleanCat(c) {
   const id = Number(c && c.id);
@@ -696,7 +897,8 @@ $('#fileJson').addEventListener('change', async ev => {
     const exps = (data.expenses || []).map(cleanExp).filter(Boolean);
     if (!cats.length) throw new Error('categorie');
     const files = exps.reduce((n, e) => n + e.attachments.length, 0);
-    if (!confirm(`Il ripristino sostituisce tutti i dati attuali con ${exps.length} spese, ${files} allegati e ${cats.length} categorie. Continuare?`)) return;
+    const warn = data.attachmentsIncluded === false ? ' Questo backup non contiene gli allegati: quelli attuali andranno persi.' : '';
+    if (!confirm(`Il ripristino sostituisce tutti i dati attuali con ${exps.length} spese, ${files} allegati e ${cats.length} categorie. Continuare?${warn}`)) return;
     const t = db.transaction(['expenses', 'categories'], 'readwrite');
     t.objectStore('expenses').clear();
     t.objectStore('categories').clear();
@@ -779,11 +981,15 @@ async function wipe() {
 }
 
 /* ---------- Navigazione ---------- */
-$('#prev').onclick = () => { S.month = shiftMonth(S.month, -1); refresh(); };
-$('#next').onclick = () => { S.month = shiftMonth(S.month, 1); refresh(); };
+function shiftPeriod(d) {
+  if (yearMode()) S.year += d; else S.month = shiftMonth(S.month, d);
+  refresh();
+}
+$('#prev').onclick = () => shiftPeriod(-1);
+$('#next').onclick = () => shiftPeriod(1);
 $('#fab').onclick = () => openExpense(null);
 document.querySelectorAll('#tabbar button').forEach(b => {
-  b.onclick = () => { S.tab = b.dataset.tab; render(); window.scrollTo(0, 0); };
+  b.onclick = async () => { S.tab = b.dataset.tab; await refresh(); window.scrollTo(0, 0); };
 });
 
 window.addEventListener('beforeinstallprompt', e => {

@@ -1,6 +1,6 @@
 /* Service worker: tiene i file dell'app in cache per l'uso offline.
    Non tocca i dati delle spese (che stanno in IndexedDB). */
-const CACHE = 'spese-v2';
+const CACHE = 'spese-v3';
 const FILES = [
   './', 'index.html', 'style.css', 'app.js', 'manifest.webmanifest',
   'icon-192.png', 'icon-512.png', 'icon-maskable-512.png'

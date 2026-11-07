@@ -346,6 +346,56 @@ dialog h2 { margin: 0; font-size: 1.15rem; }
 }
 .clip { font-size: .8rem; font-weight: 500; color: var(--muted); }
 
+/* ---------- Backup ---------- */
+.sheet { padding: 18px; display: flex; flex-direction: column; gap: 12px; }
+.sheet p { margin: 0; }
+.check { display: flex; align-items: center; gap: 10px; min-height: 44px; color: var(--text); }
+.check input { width: 22px; height: 22px; accent-color: var(--accent); }
+.msg { color: var(--danger); }
+.msg:empty { display: none; }
+.btn:disabled { opacity: .55; cursor: default; }
+
+/* ---------- Riepilogo: interruttore Mese/Anno ---------- */
+.segtoggle { display: flex; gap: 4px; padding: 3px; margin: 0 0 4px; background: var(--line); border-radius: 12px; }
+.segtoggle button {
+  flex: 1;
+  min-height: 40px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font-weight: 600;
+}
+.segtoggle button[aria-pressed="true"] {
+  background: var(--surface);
+  font-weight: 700;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .18);
+}
+.catrow .small { display: block; margin-top: 4px; }
+
+/* ---------- Riepilogo annuale ---------- */
+.ychart { display: flex; gap: 4px; align-items: flex-end; margin-top: 4px; }
+.ycol { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.ybars { width: 100%; height: 120px; display: flex; align-items: flex-end; justify-content: center; gap: 2px; }
+.ybar { flex: 1; max-width: 10px; border-radius: 3px 3px 0 0; box-sizing: border-box; }
+.ybar.cur { background: var(--accent); }
+.ybar.prev { background: transparent; border: 2px solid var(--muted); }
+.ybar.zero { border: 0; visibility: hidden; }
+.ylab { font-size: .62rem; color: var(--muted); }
+.keys { display: flex; gap: 16px; margin-top: 10px; }
+.key { display: inline-flex; align-items: center; gap: 6px; font-size: .85rem; }
+.swatch { width: 12px; height: 12px; border-radius: 3px; box-sizing: border-box; display: inline-block; }
+.swatch.cur { background: var(--accent); }
+.swatch.prev { border: 2px solid var(--muted); }
+
+.ytable { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: .85rem; }
+.ytable th, .ytable td { padding: 8px 4px; text-align: right; border-top: 1px solid var(--line); vertical-align: top; }
+.ytable thead th { border-top: 0; color: var(--muted); font-weight: 600; font-size: .75rem; }
+.ytable th:first-child, .ytable td:first-child { text-align: left; }
+.ytable tbody th { font-weight: 500; }
+.dcell span { display: block; }
+.dpct { font-weight: 650; }
+
 #viewDialog { width: min(96vw, 640px); }
 .viewer { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
 #viewImg { max-width: 100%; max-height: 70vh; object-fit: contain; border-radius: 8px; align-self: center; }
